@@ -59,7 +59,7 @@ public class MainForm : Form
                 builder.Services.AddScoped<MigrationScheduler.Blazor.Services.XmlExportService>();
                 builder.Services.AddScoped<MigrationScheduler.Blazor.Services.DraftService>();
 
-                builder.WebHost.UseUrls("http://localhost:5199");
+                builder.WebHost.UseUrls("http://localhost:5200");
 
                 var app = builder.Build();
                 app.UseStaticFiles();
@@ -91,7 +91,7 @@ public class MainForm : Form
             // Initialize WebView2 and navigate to the Blazor app
             var env = await CoreWebView2Environment.CreateAsync();
             await _webView.EnsureCoreWebView2Async(env);
-            _webView.Source = new Uri("http://localhost:5199");
+            _webView.Source = new Uri("http://localhost:5200");
         }
         catch (Exception ex)
         {
