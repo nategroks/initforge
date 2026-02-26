@@ -12,9 +12,9 @@
 <MudContainer MaxWidth="MaxWidth.Large" Class="py-4">
     <MudText Typo="Typo.h4" Class="mb-4">Project Setup Wizard</MudText>
 
-    <MudStepper @bind-ActiveIndex="_activeStep" Linear="true" Color="Color.Primary">
+    <MudTabs @bind-ActivePanelIndex="_activeStep" Rounded="true" Centered="true" Color="Color.Primary" Class="mb-4">
         @* Step 1: Project Header *@
-        <MudStep Title="Project Details" Icon="@Icons.Material.Filled.Description">
+        <MudTabPanel Text="Project Details" Icon="@Icons.Material.Filled.Description">
             <MudPaper Class="pa-6 mb-4" Elevation="1">
                 <MudText Typo="Typo.h6" Class="mb-4">Project Header Information</MudText>
 
@@ -96,10 +96,10 @@
                     </MudStack>
                 </MudStack>
             </MudPaper>
-        </MudStep>
+        </MudTabPanel>
 
         @* Step 2: Migration Type Selection *@
-        <MudStep Title="Migration Types" Icon="@Icons.Material.Filled.Category">
+        <MudTabPanel Text="Migration Types" Icon="@Icons.Material.Filled.Category">
             <MudPaper Class="pa-6 mb-4" Elevation="1">
                 <MudText Typo="Typo.h6" Class="mb-2">Select Migration Types</MudText>
                 <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
@@ -115,10 +115,10 @@
                     <PrerequisiteWarning Errors="@_prerequisiteErrors" />
                 }
             </MudPaper>
-        </MudStep>
+        </MudTabPanel>
 
         @* Step 3: Confirm & Proceed *@
-        <MudStep Title="Confirm" Icon="@Icons.Material.Filled.CheckCircle">
+        <MudTabPanel Text="Confirm" Icon="@Icons.Material.Filled.CheckCircle">
             <MudPaper Class="pa-6 mb-4" Elevation="1">
                 <MudText Typo="Typo.h6" Class="mb-4">Review Project Setup</MudText>
 
@@ -167,8 +167,8 @@
                     Generate Tasks & Continue to Activity Editor
                 </MudButton>
             </MudPaper>
-        </MudStep>
-    </MudStepper>
+        </MudTabPanel>
+    </MudTabs>
 </MudContainer>
 
 @code {

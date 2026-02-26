@@ -63,7 +63,7 @@
 
     private readonly MudTheme _theme = new()
     {
-        PaletteLight = new PaletteLight
+        Palette = new Palette
         {
             Primary = "#E51937",       // Honeywell Red
             Secondary = "#1A1A1A",
@@ -73,7 +73,7 @@
             DrawerBackground = "#FFFFFF",
             DrawerText = "#333333"
         },
-        PaletteDark = new PaletteDark
+        PaletteDark = new Palette
         {
             Primary = "#E51937",
             Secondary = "#FF6B6B",
@@ -86,9 +86,9 @@
         },
         Typography = new Typography
         {
-            Default = new DefaultTypography
+            Default = new Default
             {
-                FontFamily = ["Roboto", "Helvetica", "Arial", "sans-serif"]
+                FontFamily = new string[] { "Roboto", "Helvetica", "Arial", "sans-serif" }
             }
         }
     };
