@@ -1,0 +1,97 @@
+@inherits LayoutComponentBase
+@inject ProjectStateService StateService
+@inject NavigationManager Navigation
+
+<MudThemeProvider @bind-IsDarkMode="@_isDarkMode" Theme="_theme" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <MudAppBar Elevation="1" Dense="true">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start"
+                       OnClick="@ToggleDrawer" />
+        <MudText Typo="Typo.h6" Class="ml-3">Honeywell Experion Migration Scheduler</MudText>
+        <MudSpacer />
+        <MudText Typo="Typo.body2" Class="mr-4" Style="opacity:0.8">
+            @(string.IsNullOrEmpty(StateService.Project.UspNumber) ? "" : StateService.Project.UspNumber)
+        </MudText>
+        <MudToggleIconButton @bind-Toggled="@_isDarkMode"
+                             Icon="@Icons.Material.Filled.DarkMode"
+                             ToggledIcon="@Icons.Material.Filled.LightMode"
+                             Color="Color.Inherit"
+                             ToggledColor="Color.Warning"
+                             Title="Toggle Dark/Light Mode" />
+    </MudAppBar>
+
+    <MudDrawer @bind-Open="_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="2" Variant="DrawerVariant.Mini"
+               OpenMiniOnHover="true">
+        <MudNavMenu>
+            <MudNavLink Href="/" Match="NavLinkMatch.All"
+                        Icon="@Icons.Material.Filled.Settings"
+                        IconColor="@(StateService.Project.SetupComplete ? Color.Success : Color.Default)">
+                Project Setup
+            </MudNavLink>
+            <MudNavLink Href="/tasks"
+                        Icon="@Icons.Material.Filled.ListAlt"
+                        IconColor="@(StateService.Project.TasksComplete ? Color.Success : Color.Default)"
+                        Disabled="@(!StateService.Project.SetupComplete)">
+                Activity Editor
+            </MudNavLink>
+            <MudNavLink Href="/constraints"
+                        Icon="@Icons.Material.Filled.AccountTree"
+                        IconColor="@(StateService.Project.ConstraintsComplete ? Color.Success : Color.Default)"
+                        Disabled="@(!StateService.Project.TasksComplete)">
+                Constraints
+            </MudNavLink>
+            <MudNavLink Href="/export"
+                        Icon="@Icons.Material.Filled.FileDownload"
+                        Disabled="@(!StateService.Project.ConstraintsComplete)">
+                Export
+            </MudNavLink>
+        </MudNavMenu>
+    </MudDrawer>
+
+    <MudMainContent Class="pt-16 px-4">
+        @Body
+    </MudMainContent>
+</MudLayout>
+
+@code {
+    private bool _drawerOpen = true;
+    private bool _isDarkMode;
+
+    private readonly MudTheme _theme = new()
+    {
+        PaletteLight = new PaletteLight
+        {
+            Primary = "#E51937",       // Honeywell Red
+            Secondary = "#1A1A1A",
+            AppbarBackground = "#E51937",
+            AppbarText = "#FFFFFF",
+            Background = "#F5F5F5",
+            DrawerBackground = "#FFFFFF",
+            DrawerText = "#333333"
+        },
+        PaletteDark = new PaletteDark
+        {
+            Primary = "#E51937",
+            Secondary = "#FF6B6B",
+            AppbarBackground = "#1A1A1A",
+            AppbarText = "#FFFFFF",
+            Background = "#121212",
+            Surface = "#1E1E1E",
+            DrawerBackground = "#1A1A1A",
+            DrawerText = "#E0E0E0"
+        },
+        Typography = new Typography
+        {
+            Default = new DefaultTypography
+            {
+                FontFamily = ["Roboto", "Helvetica", "Arial", "sans-serif"]
+            }
+        }
+    };
+
+    private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
+}

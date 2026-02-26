@@ -1,0 +1,38 @@
+@* Reusable read-only task grid component for summary display *@
+
+<MudSimpleTable Dense="true" Bordered="true" Hover="true" Striped="true"
+                Style="max-height: 400px; overflow-y: auto;">
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>WBS</th>
+            <th>Task Name</th>
+            <th>Type</th>
+            <th>Duration</th>
+            <th>Start</th>
+            <th>Finish</th>
+            <th>Resource</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var task in Tasks)
+        {
+            <tr style="@(task.IsSummaryTask ? "font-weight:bold; background-color: rgba(0,0,0,0.04);" : "")">
+                <td>@task.TaskId</td>
+                <td>@task.WbsCode</td>
+                <td style="padding-left: @((task.OutlineLevel - 1) * 20 + 8)px">
+                    @task.TaskName
+                </td>
+                <td>@task.MigrationTypeTag.GetCode()</td>
+                <td>@(task.IsSummaryTask ? "" : $"{task.DurationDays}d")</td>
+                <td>@task.StartDate?.ToString("yyyy-MM-dd")</td>
+                <td>@task.FinishDate?.ToString("yyyy-MM-dd")</td>
+                <td>@task.ResourceOwner</td>
+            </tr>
+        }
+    </tbody>
+</MudSimpleTable>
+
+@code {
+    [Parameter] public List<TaskModel> Tasks { get; set; } = [];
+}

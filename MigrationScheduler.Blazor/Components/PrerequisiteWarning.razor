@@ -1,0 +1,23 @@
+@* Displays prerequisite validation errors as an amber warning banner *@
+
+@if (Errors.Count > 0)
+{
+    <MudAlert Severity="Severity.Warning" Class="mt-4" Dense="true" Variant="Variant.Filled">
+        <MudText Typo="Typo.subtitle2" Class="mb-1">Prerequisite Requirements Not Met</MudText>
+        <MudList T="string" Dense="true" DisableGutters="true">
+            @foreach (var error in Errors)
+            {
+                <MudListItem T="string" Dense="true" Icon="@Icons.Material.Filled.Warning" IconColor="Color.Inherit">
+                    <MudText Typo="Typo.body2">@error</MudText>
+                </MudListItem>
+            }
+        </MudList>
+        <MudText Typo="Typo.caption" Class="mt-2">
+            Resolve these by selecting the required types or marking them as "Already Completed (Pre-existing)".
+        </MudText>
+    </MudAlert>
+}
+
+@code {
+    [Parameter] public List<string> Errors { get; set; } = [];
+}
