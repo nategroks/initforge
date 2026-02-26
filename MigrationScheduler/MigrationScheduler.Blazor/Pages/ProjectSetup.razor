@@ -1,0 +1,280 @@
+@page "/"
+@inject ProjectStateService StateService
+@inject PrerequisiteValidator PrereqValidator
+@inject TaskTemplateService TemplateService
+@inject DraftService DraftService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+
+<PageTitle>Project Setup — Migration Scheduler</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="py-4">
+    <MudText Typo="Typo.h4" Class="mb-4">Project Setup Wizard</MudText>
+
+    <MudStepper @bind-ActiveIndex="_activeStep" Linear="true" Color="Color.Primary">
+        @* Step 1: Project Header *@
+        <MudStep Title="Project Details" Icon="@Icons.Material.Filled.Description">
+            <MudPaper Class="pa-6 mb-4" Elevation="1">
+                <MudText Typo="Typo.h6" Class="mb-4">Project Header Information</MudText>
+
+                <MudGrid>
+                    <MudItem xs="12" md="6">
+                        <MudTextField @bind-Value="_project.ProjectName"
+                                      Label="Project Name"
+                                      Required="true"
+                                      RequiredError="Project Name is required"
+                                      Variant="Variant.Outlined"
+                                      Immediate="true" />
+                    </MudItem>
+                    <MudItem xs="12" md="6">
+                        <MudTextField @bind-Value="_project.UspNumber"
+                                      Label="USP Number"
+                                      Required="true"
+                                      RequiredError="USP Number is required"
+                                      Placeholder="USP-XXXXXX"
+                                      Validation="@(new Func<string, string?>(ValidateUsp))"
+                                      Variant="Variant.Outlined"
+                                      Immediate="true" />
+                    </MudItem>
+                    <MudItem xs="12" md="6">
+                        <MudTextField @bind-Value="_project.CustomerSiteName"
+                                      Label="Customer / Site Name"
+                                      Required="true"
+                                      RequiredError="Customer / Site Name is required"
+                                      Variant="Variant.Outlined"
+                                      Immediate="true" />
+                    </MudItem>
+                    <MudItem xs="12" md="6">
+                        <MudTextField @bind-Value="_project.ProjectManager"
+                                      Label="Project Manager"
+                                      Required="true"
+                                      RequiredError="Project Manager is required"
+                                      Variant="Variant.Outlined"
+                                      Immediate="true" />
+                    </MudItem>
+                    <MudItem xs="12" md="6">
+                        <MudDatePicker @bind-Date="_project.ProjectStartDate"
+                                       Label="Project Start Date"
+                                       Required="true"
+                                       RequiredError="Project Start Date is required"
+                                       Variant="Variant.Outlined"
+                                       DateFormat="yyyy-MM-dd" />
+                    </MudItem>
+                    <MudItem xs="12" md="6">
+                        <MudDatePicker @bind-Date="_project.TargetCompletionDate"
+                                       Label="Target Completion Date"
+                                       Required="true"
+                                       RequiredError="Target Completion Date is required"
+                                       Variant="Variant.Outlined"
+                                       DateFormat="yyyy-MM-dd"
+                                       MinDate="@_project.ProjectStartDate" />
+                    </MudItem>
+                    <MudItem xs="12">
+                        <MudTextField @bind-Value="_project.ProjectDescription"
+                                      Label="Project Description"
+                                      Lines="3"
+                                      Variant="Variant.Outlined" />
+                    </MudItem>
+                </MudGrid>
+
+                <MudDivider Class="my-4" />
+
+                <MudStack Row="true" Justify="Justify.SpaceBetween">
+                    <MudStack Row="true" Spacing="2">
+                        <MudButton Variant="Variant.Outlined" Color="Color.Default"
+                                   StartIcon="@Icons.Material.Filled.UploadFile"
+                                   OnClick="LoadDraft">
+                            Load Draft
+                        </MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Default"
+                                   StartIcon="@Icons.Material.Filled.Save"
+                                   OnClick="SaveDraft"
+                                   Disabled="@(!StateService.IsHeaderValid())">
+                            Save Draft
+                        </MudButton>
+                    </MudStack>
+                </MudStack>
+            </MudPaper>
+        </MudStep>
+
+        @* Step 2: Migration Type Selection *@
+        <MudStep Title="Migration Types" Icon="@Icons.Material.Filled.Category">
+            <MudPaper Class="pa-6 mb-4" Elevation="1">
+                <MudText Typo="Typo.h6" Class="mb-2">Select Migration Types</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+                    Select all migration categories applicable to this project. Multiple selections are allowed.
+                </MudText>
+
+                <MigrationTypeSelector SelectedTypes="@_project.SelectedTypes"
+                                       PreExistingTypes="@_project.PreExistingTypes"
+                                       OnSelectionChanged="OnMigrationTypeChanged" />
+
+                @if (_prerequisiteErrors.Count > 0)
+                {
+                    <PrerequisiteWarning Errors="@_prerequisiteErrors" />
+                }
+            </MudPaper>
+        </MudStep>
+
+        @* Step 3: Confirm & Proceed *@
+        <MudStep Title="Confirm" Icon="@Icons.Material.Filled.CheckCircle">
+            <MudPaper Class="pa-6 mb-4" Elevation="1">
+                <MudText Typo="Typo.h6" Class="mb-4">Review Project Setup</MudText>
+
+                <MudSimpleTable Dense="true" Bordered="true" Class="mb-4">
+                    <tbody>
+                        <tr><td><strong>Project Name</strong></td><td>@_project.ProjectName</td></tr>
+                        <tr><td><strong>USP Number</strong></td><td>@_project.UspNumber</td></tr>
+                        <tr><td><strong>Customer / Site</strong></td><td>@_project.CustomerSiteName</td></tr>
+                        <tr><td><strong>Project Manager</strong></td><td>@_project.ProjectManager</td></tr>
+                        <tr><td><strong>Start Date</strong></td><td>@_project.ProjectStartDate?.ToString("yyyy-MM-dd")</td></tr>
+                        <tr><td><strong>Target Completion</strong></td><td>@_project.TargetCompletionDate?.ToString("yyyy-MM-dd")</td></tr>
+                        <tr>
+                            <td><strong>Migration Types</strong></td>
+                            <td>
+                                @foreach (var t in _project.SelectedTypes)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Class="mr-1">@t.GetShortName()</MudChip>
+                                }
+                            </td>
+                        </tr>
+                        @if (_project.PreExistingTypes.Count > 0)
+                        {
+                            <tr>
+                                <td><strong>Pre-existing</strong></td>
+                                <td>
+                                    @foreach (var t in _project.PreExistingTypes)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Class="mr-1">@t.GetShortName()</MudChip>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+
+                <MudAlert Severity="Severity.Info" Class="mb-4">
+                    Proceeding will generate @(_estimatedTaskCount) default tasks based on your selected migration types.
+                    You can modify all tasks in the Activity Editor.
+                </MudAlert>
+
+                <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                           Size="Size.Large"
+                           StartIcon="@Icons.Material.Filled.ArrowForward"
+                           OnClick="CompleteSetup"
+                           Disabled="@(!CanCompleteSetup)">
+                    Generate Tasks & Continue to Activity Editor
+                </MudButton>
+            </MudPaper>
+        </MudStep>
+    </MudStepper>
+</MudContainer>
+
+@code {
+    private ProjectModel _project = new();
+    private int _activeStep;
+    private List<string> _prerequisiteErrors = [];
+    private int _estimatedTaskCount;
+
+    protected override void OnInitialized()
+    {
+        _project = StateService.Project;
+        ValidatePrerequisites();
+        UpdateTaskEstimate();
+    }
+
+    private string? ValidateUsp(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "USP Number is required";
+        if (!System.Text.RegularExpressions.Regex.IsMatch(value, @"^USP-\d{6}$"))
+            return "Format must be USP-XXXXXX (6 digits)";
+        return null;
+    }
+
+    private void OnMigrationTypeChanged()
+    {
+        ValidatePrerequisites();
+        UpdateTaskEstimate();
+        StateChanged();
+    }
+
+    private void ValidatePrerequisites()
+    {
+        _prerequisiteErrors = PrereqValidator.Validate(_project);
+    }
+
+    private void UpdateTaskEstimate()
+    {
+        var tempTasks = TemplateService.GenerateDefaultTasks(
+            _project.SelectedTypes, _project.UspNumber ?? "", _project.ProjectStartDate);
+        _estimatedTaskCount = tempTasks.Count(t => !t.IsSummaryTask);
+    }
+
+    private bool CanCompleteSetup =>
+        StateService.IsHeaderValid()
+        && StateService.HasSelectedTypes()
+        && _prerequisiteErrors.Count == 0;
+
+    private void CompleteSetup()
+    {
+        // Generate default tasks if none exist yet, or regenerate if types changed
+        _project.Tasks = TemplateService.GenerateDefaultTasks(
+            _project.SelectedTypes, _project.UspNumber, _project.ProjectStartDate);
+
+        _project.SetupComplete = true;
+        StateService.NotifyStateChanged();
+        Navigation.NavigateTo("/tasks");
+    }
+
+    private void StateChanged()
+    {
+        StateService.NotifyStateChanged();
+        StateHasChanged();
+    }
+
+    private async Task SaveDraft()
+    {
+        try
+        {
+            var json = DraftService.SerializeProject(_project);
+            var fileName = DraftService.GetDefaultDraftFileName(_project);
+            await JS.InvokeVoidAsync("interop.downloadFile", fileName, json, "application/json");
+            Snackbar.Add("Draft saved successfully.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to save draft: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task LoadDraft()
+    {
+        try
+        {
+            var json = await JS.InvokeAsync<string>("interop.uploadFile", ".json");
+            if (!string.IsNullOrEmpty(json))
+            {
+                var loaded = DraftService.DeserializeProject(json);
+                if (loaded is not null)
+                {
+                    StateService.LoadProject(loaded);
+                    _project = StateService.Project;
+                    ValidatePrerequisites();
+                    UpdateTaskEstimate();
+                    Snackbar.Add("Draft loaded successfully.", Severity.Success);
+                    StateHasChanged();
+                }
+                else
+                {
+                    Snackbar.Add("Failed to parse draft file.", Severity.Error);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load draft: {ex.Message}", Severity.Error);
+        }
+    }
+}

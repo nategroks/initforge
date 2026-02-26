@@ -1,0 +1,91 @@
+@* Migration Type selection component with prerequisite "pre-existing" toggles *@
+
+<MudGrid>
+    @foreach (var type in _selectableTypes)
+    {
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-3" Elevation="0" Outlined="true"
+                      Style="@(IsSelected(type) ? "border-color: var(--mud-palette-primary); border-width: 2px;" : "")">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudCheckBox T="bool" Value="@IsSelected(type)"
+                                 ValueChanged="@((bool v) => ToggleType(type, v))"
+                                 Color="Color.Primary" Dense="true" />
+                    <MudStack Spacing="0" Style="flex:1">
+                        <MudText Typo="Typo.subtitle2">@type.GetDisplayName()</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">@type.GetDescription()</MudText>
+                    </MudStack>
+                </MudStack>
+
+                @if (HasPreExistingOption(type) && !IsSelected(type))
+                {
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mt-2 ml-8">
+                        <MudSwitch T="bool" Value="@IsPreExisting(type)"
+                                   ValueChanged="@((bool v) => TogglePreExisting(type, v))"
+                                   Color="Color.Info" Size="Size.Small" />
+                        <MudText Typo="Typo.caption" Color="Color.Info">
+                            Already Completed (Pre-existing)
+                        </MudText>
+                    </MudStack>
+                }
+            </MudPaper>
+        </MudItem>
+    }
+</MudGrid>
+
+@code {
+    [Parameter] public HashSet<MigrationType> SelectedTypes { get; set; } = [];
+    [Parameter] public HashSet<MigrationType> PreExistingTypes { get; set; } = [];
+    [Parameter] public EventCallback OnSelectionChanged { get; set; }
+
+    // Types available for selection (General is always auto-included, not shown here)
+    private static readonly MigrationType[] _selectableTypes =
+    [
+        MigrationType.ELCN,
+        MigrationType.EUCN,
+        MigrationType.AMT,
+        MigrationType.Virtualization,
+        MigrationType.SafetyManager,
+        MigrationType.UOC,
+        MigrationType.HardwareRefresh
+    ];
+
+    // Types that can serve as prerequisites and thus have a "pre-existing" toggle
+    private static readonly HashSet<MigrationType> _prerequisiteTypes =
+    [
+        MigrationType.ELCN,
+        MigrationType.EUCN,
+        MigrationType.HardwareRefresh
+    ];
+
+    private bool IsSelected(MigrationType type) => SelectedTypes.Contains(type);
+    private bool IsPreExisting(MigrationType type) => PreExistingTypes.Contains(type);
+    private bool HasPreExistingOption(MigrationType type) => _prerequisiteTypes.Contains(type);
+
+    private async Task ToggleType(MigrationType type, bool selected)
+    {
+        if (selected)
+        {
+            SelectedTypes.Add(type);
+            PreExistingTypes.Remove(type); // Can't be both
+        }
+        else
+        {
+            SelectedTypes.Remove(type);
+        }
+        await OnSelectionChanged.InvokeAsync();
+    }
+
+    private async Task TogglePreExisting(MigrationType type, bool preExisting)
+    {
+        if (preExisting)
+        {
+            PreExistingTypes.Add(type);
+            SelectedTypes.Remove(type); // Can't be both
+        }
+        else
+        {
+            PreExistingTypes.Remove(type);
+        }
+        await OnSelectionChanged.InvokeAsync();
+    }
+}

@@ -1,0 +1,174 @@
+@page "/export"
+@inject ProjectStateService StateService
+@inject XmlExportService XmlService
+@inject DraftService DraftService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+
+<PageTitle>Export — Migration Scheduler</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="py-4">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudText Typo="Typo.h4">Export to Microsoft Project</MudText>
+        <MudButton Variant="Variant.Outlined" Color="Color.Default"
+                   StartIcon="@Icons.Material.Filled.ArrowBack"
+                   OnClick="@(() => Navigation.NavigateTo("/constraints"))">
+            Back to Constraints
+        </MudButton>
+    </MudStack>
+
+    @if (!StateService.Project.ConstraintsComplete)
+    {
+        <MudAlert Severity="Severity.Warning" Class="mb-4">
+            Please complete the Constraints & Dependencies step before exporting.
+        </MudAlert>
+    }
+    else
+    {
+        @* Validation Results *@
+        @if (_validationErrors.Count > 0)
+        {
+            <MudAlert Severity="Severity.Error" Class="mb-4">
+                <MudText Typo="Typo.subtitle2">Please fix the following errors before exporting:</MudText>
+                <MudList T="string" Dense="true">
+                    @foreach (var error in _validationErrors)
+                    {
+                        <MudListItem T="string" Icon="@Icons.Material.Filled.Error" IconColor="Color.Error">
+                            @error
+                        </MudListItem>
+                    }
+                </MudList>
+            </MudAlert>
+        }
+
+        @* Project Summary *@
+        <MudGrid>
+            <MudItem xs="12" md="4">
+                <MudPaper Class="pa-4" Elevation="1">
+                    <MudText Typo="Typo.h6" Class="mb-3">Project Summary</MudText>
+                    <MudSimpleTable Dense="true">
+                        <tbody>
+                            <tr><td><strong>Project</strong></td><td>@_project.ProjectName</td></tr>
+                            <tr><td><strong>USP</strong></td><td>@_project.UspNumber</td></tr>
+                            <tr><td><strong>Customer</strong></td><td>@_project.CustomerSiteName</td></tr>
+                            <tr><td><strong>PM</strong></td><td>@_project.ProjectManager</td></tr>
+                            <tr><td><strong>Start</strong></td><td>@_project.ProjectStartDate?.ToString("yyyy-MM-dd")</td></tr>
+                            <tr><td><strong>End</strong></td><td>@_project.TargetCompletionDate?.ToString("yyyy-MM-dd")</td></tr>
+                            <tr><td><strong>Tasks</strong></td><td>@_project.Tasks.Count(t => !t.IsSummaryTask)</td></tr>
+                            <tr><td><strong>Dependencies</strong></td><td>@_project.Tasks.Sum(t => t.Predecessors.Count)</td></tr>
+                        </tbody>
+                    </MudSimpleTable>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" md="8">
+                <MudPaper Class="pa-4" Elevation="1">
+                    <MudText Typo="Typo.h6" Class="mb-3">Gantt Preview</MudText>
+                    <GanttPreview Tasks="@_project.Tasks"
+                                  ProjectStart="@_project.ProjectStartDate"
+                                  ProjectEnd="@_project.TargetCompletionDate" />
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        @* Export Actions *@
+        <MudPaper Class="pa-4 mt-4" Elevation="1">
+            <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Large"
+                           StartIcon="@Icons.Material.Filled.FileDownload"
+                           OnClick="ExportXml"
+                           Disabled="@(_validationErrors.Count > 0)">
+                    Generate MSP XML
+                </MudButton>
+                <MudButton Variant="Variant.Outlined" Color="Color.Default"
+                           StartIcon="@Icons.Material.Filled.Save"
+                           OnClick="SaveDraft">
+                    Save Draft
+                </MudButton>
+                <MudButton Variant="Variant.Outlined" Color="Color.Secondary"
+                           StartIcon="@Icons.Material.Filled.Preview"
+                           OnClick="PreviewXml"
+                           Disabled="@(_validationErrors.Count > 0)">
+                    Preview XML
+                </MudButton>
+            </MudStack>
+        </MudPaper>
+
+        @* XML Preview Dialog *@
+        @if (_showXmlPreview)
+        {
+            <MudPaper Class="pa-4 mt-4" Elevation="1">
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
+                    <MudText Typo="Typo.h6">XML Preview</MudText>
+                    <MudIconButton Icon="@Icons.Material.Filled.Close" OnClick="@(() => _showXmlPreview = false)" />
+                </MudStack>
+                <MudTextField Value="@_xmlPreview" Lines="20" ReadOnly="true"
+                              Variant="Variant.Outlined"
+                              Style="font-family: 'Consolas', 'Courier New', monospace; font-size: 12px;" />
+            </MudPaper>
+        }
+    }
+</MudContainer>
+
+@code {
+    private ProjectModel _project = new();
+    private List<string> _validationErrors = [];
+    private bool _showXmlPreview;
+    private string _xmlPreview = string.Empty;
+
+    protected override void OnInitialized()
+    {
+        _project = StateService.Project;
+        Validate();
+    }
+
+    private void Validate()
+    {
+        _validationErrors = XmlService.ValidateForExport(_project);
+    }
+
+    private async Task ExportXml()
+    {
+        Validate();
+        if (_validationErrors.Count > 0) return;
+
+        try
+        {
+            var xml = XmlService.GenerateXml(_project);
+            var fileName = XmlExportService.GetDefaultExportFileName(_project);
+
+            await JS.InvokeVoidAsync("interop.downloadFile", fileName, xml, "application/xml");
+
+            Snackbar.Add($"XML exported successfully as {fileName}", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Export failed: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private void PreviewXml()
+    {
+        Validate();
+        if (_validationErrors.Count > 0) return;
+
+        _xmlPreview = XmlService.GenerateXml(_project);
+        _showXmlPreview = true;
+    }
+
+    private async Task SaveDraft()
+    {
+        try
+        {
+            var json = DraftService.SerializeProject(_project);
+            var fileName = DraftService.GetDefaultDraftFileName(_project);
+            await JS.InvokeVoidAsync("interop.downloadFile", fileName, json, "application/json");
+            Snackbar.Add("Draft saved successfully.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to save draft: {ex.Message}", Severity.Error);
+        }
+    }
+}

@@ -1,0 +1,246 @@
+@page "/constraints"
+@inject ProjectStateService StateService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>Constraints & Dependencies — Migration Scheduler</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="py-4">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudText Typo="Typo.h4">Constraint & Dependency Manager</MudText>
+        <MudStack Row="true" Spacing="2">
+            <MudButton Variant="Variant.Outlined" Color="Color.Default"
+                       StartIcon="@Icons.Material.Filled.ArrowBack"
+                       OnClick="@(() => Navigation.NavigateTo("/tasks"))">
+                Back to Tasks
+            </MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.ArrowForward"
+                       OnClick="ProceedToExport">
+                Continue to Export
+            </MudButton>
+        </MudStack>
+    </MudStack>
+
+    @if (!StateService.Project.TasksComplete)
+    {
+        <MudAlert Severity="Severity.Warning" Class="mb-4">
+            Please complete the Activity Editor before managing constraints.
+        </MudAlert>
+    }
+    else
+    {
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+            Click on a task to expand its dependency and constraint settings. Define predecessors, constraint types, and deadlines for each task.
+        </MudText>
+
+        <MudExpansionPanels MultiExpansion="true" Elevation="1">
+            @foreach (var task in _tasks.Where(t => !t.IsSummaryTask))
+            {
+                <MudExpansionPanel>
+                    <TitleContent>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudChip T="string" Size="Size.Small" Color="Color.Primary">@task.TaskId</MudChip>
+                            <MudText Typo="Typo.subtitle2">@task.TaskName</MudText>
+                            <MudSpacer />
+                            @if (task.Predecessors.Count > 0)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Info">
+                                    @task.Predecessors.Count pred.
+                                </MudChip>
+                            }
+                            @if (task.ConstraintType != ConstraintType.ASAP)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Warning">
+                                    @task.ConstraintType
+                                </MudChip>
+                            }
+                            @if (task.Deadline.HasValue)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Error">
+                                    Deadline
+                                </MudChip>
+                            }
+                        </MudStack>
+                    </TitleContent>
+                    <ChildContent>
+                        <MudGrid Class="pa-2">
+                            @* Predecessor Section *@
+                            <MudItem xs="12">
+                                <MudText Typo="Typo.subtitle1" Class="mb-2">Predecessors</MudText>
+                            </MudItem>
+
+                            @if (task.Predecessors.Count > 0)
+                            {
+                                <MudItem xs="12">
+                                    <MudSimpleTable Dense="true" Bordered="true" Class="mb-2">
+                                        <thead>
+                                            <tr>
+                                                <th>Predecessor Task</th>
+                                                <th style="width:180px">Dependency Type</th>
+                                                <th style="width:100px">Lag (days)</th>
+                                                <th style="width:60px">Remove</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var pred in task.Predecessors.ToList())
+                                            {
+                                                var predTask = _tasks.FirstOrDefault(t => t.TaskId == pred.PredecessorTaskId);
+                                                <tr>
+                                                    <td>@pred.PredecessorTaskId — @(predTask?.TaskName ?? "Unknown")</td>
+                                                    <td>
+                                                        <MudSelect T="DependencyType" @bind-Value="pred.Type"
+                                                                   Variant="Variant.Text" Dense="true" Margin="Margin.Dense">
+                                                            @foreach (DependencyType dt in Enum.GetValues<DependencyType>())
+                                                            {
+                                                                <MudSelectItem T="DependencyType" Value="@dt">@dt.GetDisplayName()</MudSelectItem>
+                                                            }
+                                                        </MudSelect>
+                                                    </td>
+                                                    <td>
+                                                        <MudNumericField T="int" @bind-Value="pred.LagDays"
+                                                                         Variant="Variant.Text" Dense="true" Margin="Margin.Dense" />
+                                                    </td>
+                                                    <td>
+                                                        <MudIconButton Icon="@Icons.Material.Filled.RemoveCircle"
+                                                                       Size="Size.Small" Color="Color.Error"
+                                                                       OnClick="@(() => RemovePredecessor(task, pred))" />
+                                                    </td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </MudSimpleTable>
+                                </MudItem>
+                            }
+
+                            <MudItem xs="12" md="6">
+                                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.End">
+                                    <MudSelect T="int?" @bind-Value="_selectedPredecessorId" Label="Add Predecessor"
+                                               Variant="Variant.Outlined" Dense="true" Margin="Margin.Dense"
+                                               Clearable="true" Style="min-width:300px">
+                                        @foreach (var candidate in GetPredecessorCandidates(task))
+                                        {
+                                            <MudSelectItem T="int?" Value="@candidate.TaskId">
+                                                @candidate.TaskId — @candidate.TaskName
+                                            </MudSelectItem>
+                                        }
+                                    </MudSelect>
+                                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                                               OnClick="@(() => AddPredecessor(task))"
+                                               Disabled="@(!_selectedPredecessorId.HasValue)">
+                                        Add
+                                    </MudButton>
+                                </MudStack>
+                            </MudItem>
+
+                            <MudItem xs="12"><MudDivider Class="my-2" /></MudItem>
+
+                            @* Constraint Section *@
+                            <MudItem xs="12">
+                                <MudText Typo="Typo.subtitle1" Class="mb-2">Task Constraint</MudText>
+                            </MudItem>
+                            <MudItem xs="12" md="4">
+                                <MudSelect T="ConstraintType" @bind-Value="task.ConstraintType"
+                                           Label="Constraint Type" Variant="Variant.Outlined"
+                                           Dense="true" Margin="Margin.Dense">
+                                    @foreach (ConstraintType ct in Enum.GetValues<ConstraintType>())
+                                    {
+                                        <MudSelectItem T="ConstraintType" Value="@ct">@ct.GetDisplayName()</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            </MudItem>
+                            <MudItem xs="12" md="4">
+                                @if (task.ConstraintType.RequiresDate())
+                                {
+                                    <MudDatePicker @bind-Date="task.ConstraintDate" Label="Constraint Date"
+                                                   Variant="Variant.Outlined" Dense="true" Margin="Margin.Dense"
+                                                   DateFormat="yyyy-MM-dd"
+                                                   Required="true" RequiredError="Constraint date is required for this type" />
+                                }
+                            </MudItem>
+                            <MudItem xs="12" md="4">
+                                <MudDatePicker @bind-Date="task.Deadline" Label="Deadline (optional)"
+                                               Variant="Variant.Outlined" Dense="true" Margin="Margin.Dense"
+                                               DateFormat="yyyy-MM-dd" Clearable="true" />
+                            </MudItem>
+                        </MudGrid>
+                    </ChildContent>
+                </MudExpansionPanel>
+            }
+        </MudExpansionPanels>
+    }
+</MudContainer>
+
+@code {
+    private List<TaskModel> _tasks = [];
+    private int? _selectedPredecessorId;
+
+    protected override void OnInitialized()
+    {
+        _tasks = StateService.Project.Tasks;
+    }
+
+    private IEnumerable<TaskModel> GetPredecessorCandidates(TaskModel currentTask)
+    {
+        return _tasks.Where(t =>
+            !t.IsSummaryTask
+            && t.TaskId != currentTask.TaskId
+            && !currentTask.Predecessors.Any(p => p.PredecessorTaskId == t.TaskId));
+    }
+
+    private void AddPredecessor(TaskModel task)
+    {
+        if (_selectedPredecessorId.HasValue)
+        {
+            // Check for circular dependency before adding
+            if (WouldCreateCycle(task.TaskId, _selectedPredecessorId.Value))
+            {
+                Snackbar.Add("Cannot add this predecessor: it would create a circular dependency.", Severity.Warning);
+                return;
+            }
+
+            task.Predecessors.Add(new PredecessorLinkModel(_selectedPredecessorId.Value));
+            _selectedPredecessorId = null;
+            StateService.NotifyStateChanged();
+        }
+    }
+
+    private void RemovePredecessor(TaskModel task, PredecessorLinkModel pred)
+    {
+        task.Predecessors.Remove(pred);
+        StateService.NotifyStateChanged();
+    }
+
+    private bool WouldCreateCycle(int taskId, int predecessorId)
+    {
+        // BFS to check if taskId is reachable from predecessorId
+        var visited = new HashSet<int>();
+        var queue = new Queue<int>();
+        queue.Enqueue(taskId);
+
+        while (queue.Count > 0)
+        {
+            var current = queue.Dequeue();
+            if (current == predecessorId)
+                return true;
+            if (!visited.Add(current))
+                continue;
+
+            // Find all tasks that have 'current' as a predecessor (i.e., current is a successor of them)
+            foreach (var t in _tasks)
+            {
+                if (t.Predecessors.Any(p => p.PredecessorTaskId == current) && !visited.Contains(t.TaskId))
+                    queue.Enqueue(t.TaskId);
+            }
+        }
+
+        return false;
+    }
+
+    private void ProceedToExport()
+    {
+        StateService.Project.ConstraintsComplete = true;
+        StateService.NotifyStateChanged();
+        Navigation.NavigateTo("/export");
+    }
+}

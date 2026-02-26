@@ -1,0 +1,176 @@
+@* Read-only mini Gantt chart rendered as HTML/SVG for export preview *@
+
+<div style="overflow-x: auto; overflow-y: auto; max-height: 500px;">
+    @if (_visibleTasks.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="pa-4">
+            No tasks with dates to display. Assign start dates to see the Gantt chart.
+        </MudText>
+    }
+    else
+    {
+        <div style="position: relative; min-width: @(_chartWidth)px; min-height: @(_chartHeight)px;">
+            @* Header: month labels *@
+            <div style="display:flex; height:30px; border-bottom:1px solid #ccc; position:sticky; top:0; background:var(--mud-palette-surface); z-index:1;">
+                @foreach (var month in _months)
+                {
+                    <div style="position:absolute; left:@(month.OffsetPx)px; width:@(month.WidthPx)px;
+                                text-align:center; font-size:11px; font-weight:600; padding-top:6px;
+                                border-right:1px solid #ddd; color:var(--mud-palette-text-primary);">
+                        @month.Label
+                    </div>
+                }
+            </div>
+
+            @* Task bars *@
+            @{ int rowIndex = 0; }
+            @foreach (var task in _visibleTasks)
+            {
+                var top = 30 + rowIndex * _rowHeight;
+                <div style="position:absolute; left:0; top:@(top)px; width:100%; height:@(_rowHeight)px;
+                            display:flex; align-items:center; border-bottom:1px solid #eee;">
+                    @* Task name label *@
+                    <div style="width:220px; min-width:220px; padding:0 8px; font-size:11px;
+                                overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+                                color:var(--mud-palette-text-primary);"
+                         title="@task.TaskName">
+                        @task.TaskName
+                    </div>
+                    @* Bar *@
+                    <div style="position:relative; flex:1;">
+                        <div style="position:absolute; left:@(task.BarLeftPx)px; width:@(Math.Max(task.BarWidthPx, 4))px;
+                                    height:16px; top:4px; border-radius:3px;
+                                    background:@(task.Color); opacity:0.85;"
+                             title="@task.TaskName: @task.Start?.ToString("MMM dd") — @task.End?.ToString("MMM dd") (@task.Duration days)">
+                            @if (task.BarWidthPx > 40)
+                            {
+                                <span style="font-size:9px; color:#fff; padding-left:4px; line-height:16px;">
+                                    @task.Duration d
+                                </span>
+                            }
+                        </div>
+                    </div>
+                </div>
+                rowIndex++;
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public List<TaskModel> Tasks { get; set; } = [];
+    [Parameter] public DateTime? ProjectStart { get; set; }
+    [Parameter] public DateTime? ProjectEnd { get; set; }
+
+    private List<GanttTask> _visibleTasks = [];
+    private List<MonthHeader> _months = [];
+    private int _chartWidth;
+    private int _chartHeight;
+    private const int _rowHeight = 24;
+    private const double _pixelsPerDay = 4.0;
+
+    protected override void OnParametersSet()
+    {
+        BuildChart();
+    }
+
+    private void BuildChart()
+    {
+        _visibleTasks.Clear();
+        _months.Clear();
+
+        if (Tasks.Count == 0) return;
+
+        // Determine date range
+        var tasksWithDates = Tasks.Where(t => !t.IsSummaryTask && t.StartDate.HasValue).ToList();
+        if (tasksWithDates.Count == 0 && !ProjectStart.HasValue) return;
+
+        var chartStart = ProjectStart ?? tasksWithDates.Min(t => t.StartDate!.Value);
+        var chartEnd = ProjectEnd ?? DateTime.Today.AddMonths(6);
+
+        // Extend chartEnd if any tasks go beyond
+        foreach (var t in tasksWithDates)
+        {
+            var taskEnd = t.FinishDate ?? t.StartDate!.Value.AddDays(t.DurationDays);
+            if (taskEnd > chartEnd) chartEnd = taskEnd;
+        }
+
+        chartStart = new DateTime(chartStart.Year, chartStart.Month, 1);
+        chartEnd = new DateTime(chartEnd.Year, chartEnd.Month, 1).AddMonths(1);
+
+        var totalDays = (chartEnd - chartStart).TotalDays;
+        _chartWidth = (int)(totalDays * _pixelsPerDay) + 220; // 220 for label column
+
+        // Build month headers
+        var current = chartStart;
+        while (current < chartEnd)
+        {
+            var nextMonth = current.AddMonths(1);
+            var monthDays = (nextMonth - current).TotalDays;
+            _months.Add(new MonthHeader
+            {
+                Label = current.ToString("MMM yy"),
+                OffsetPx = (int)((current - chartStart).TotalDays * _pixelsPerDay) + 220,
+                WidthPx = (int)(monthDays * _pixelsPerDay)
+            });
+            current = nextMonth;
+        }
+
+        // Build visible tasks
+        var colorMap = new Dictionary<MigrationType, string>
+        {
+            [MigrationType.General] = "#607D8B",
+            [MigrationType.ELCN] = "#2196F3",
+            [MigrationType.EUCN] = "#4CAF50",
+            [MigrationType.AMT] = "#FF9800",
+            [MigrationType.Virtualization] = "#9C27B0",
+            [MigrationType.SafetyManager] = "#F44336",
+            [MigrationType.UOC] = "#00BCD4",
+            [MigrationType.HardwareRefresh] = "#795548"
+        };
+
+        foreach (var task in Tasks.Where(t => !t.IsSummaryTask))
+        {
+            var start = task.StartDate;
+            var end = task.FinishDate ?? (start?.AddDays(Math.Max(task.DurationDays - 1, 0)));
+
+            var barLeft = start.HasValue
+                ? (int)((start.Value - chartStart).TotalDays * _pixelsPerDay)
+                : 0;
+            var barWidth = start.HasValue && end.HasValue
+                ? (int)((end.Value - start.Value).TotalDays * _pixelsPerDay)
+                : (int)(task.DurationDays * _pixelsPerDay);
+
+            _visibleTasks.Add(new GanttTask
+            {
+                TaskName = task.TaskName,
+                Start = start,
+                End = end,
+                Duration = task.DurationDays,
+                BarLeftPx = Math.Max(barLeft, 0),
+                BarWidthPx = Math.Max(barWidth, 4),
+                Color = colorMap.GetValueOrDefault(task.MigrationTypeTag, "#607D8B")
+            });
+        }
+
+        _chartHeight = 30 + _visibleTasks.Count * _rowHeight;
+    }
+
+    private class GanttTask
+    {
+        public string TaskName { get; set; } = "";
+        public DateTime? Start { get; set; }
+        public DateTime? End { get; set; }
+        public int Duration { get; set; }
+        public int BarLeftPx { get; set; }
+        public int BarWidthPx { get; set; }
+        public string Color { get; set; } = "#607D8B";
+    }
+
+    private class MonthHeader
+    {
+        public string Label { get; set; } = "";
+        public int OffsetPx { get; set; }
+        public int WidthPx { get; set; }
+    }
+}

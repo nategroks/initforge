@@ -1,0 +1,288 @@
+@page "/tasks"
+@inject ProjectStateService StateService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>Activity Editor — Migration Scheduler</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="py-4">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudText Typo="Typo.h4">Activity Editor</MudText>
+        <MudStack Row="true" Spacing="2">
+            <MudButton Variant="Variant.Outlined" Color="Color.Default"
+                       StartIcon="@Icons.Material.Filled.ArrowBack"
+                       OnClick="@(() => Navigation.NavigateTo("/"))">
+                Back to Setup
+            </MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.ArrowForward"
+                       OnClick="ProceedToConstraints"
+                       Disabled="@(!HasValidTasks)">
+                Continue to Constraints
+            </MudButton>
+        </MudStack>
+    </MudStack>
+
+    @if (!StateService.Project.SetupComplete)
+    {
+        <MudAlert Severity="Severity.Warning" Class="mb-4">
+            Please complete the Project Setup before editing tasks.
+            <MudButton Variant="Variant.Text" Color="Color.Warning" OnClick="@(() => Navigation.NavigateTo("/"))">
+                Go to Setup
+            </MudButton>
+        </MudAlert>
+    }
+    else
+    {
+        <MudPaper Class="pa-4 mb-4" Elevation="1">
+            <MudStack Row="true" Spacing="2" Class="mb-3">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Add"
+                           OnClick="AddNewTask" Size="Size.Small">
+                    Add Task
+                </MudButton>
+                <MudSelect T="MigrationType?" @bind-Value="_filterType" Label="Filter by Type"
+                           Variant="Variant.Outlined" Dense="true" Margin="Margin.Dense"
+                           Clearable="true" Style="max-width: 250px;">
+                    @foreach (var t in GetAvailableTypes())
+                    {
+                        <MudSelectItem T="MigrationType?" Value="@t">@t.GetShortName()</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudSpacer />
+                <MudText Typo="Typo.body2" Class="align-self-center" Color="Color.Secondary">
+                    @_tasks.Count(t => !t.IsSummaryTask) tasks | @_tasks.Count(t => t.IsSummaryTask) sections
+                </MudText>
+            </MudStack>
+
+            <MudTable Items="@FilteredTasks" Dense="true" Hover="true" Bordered="true" Striped="true"
+                      FixedHeader="true" Height="calc(100vh - 320px)"
+                      RowClassFunc="@((item, _) => item.IsSummaryTask ? "summary-row" : "")">
+                <HeaderContent>
+                    <MudTh Style="width:50px">ID</MudTh>
+                    <MudTh Style="width:80px">WBS</MudTh>
+                    <MudTh>Task Name</MudTh>
+                    <MudTh Style="width:130px">Type</MudTh>
+                    <MudTh Style="width:70px">Days</MudTh>
+                    <MudTh Style="width:130px">Start</MudTh>
+                    <MudTh Style="width:130px">Finish</MudTh>
+                    <MudTh Style="width:120px">Resource</MudTh>
+                    <MudTh Style="width:60px">%</MudTh>
+                    <MudTh Style="width:100px">Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="ID">
+                        <MudText Typo="Typo.body2">@context.TaskId</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="WBS">
+                        @if (_editingTaskId == context.TaskId)
+                        {
+                            <MudTextField @bind-Value="context.WbsCode" Variant="Variant.Text"
+                                          Margin="Margin.Dense" Dense="true" />
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Style="@GetIndentStyle(context)">@context.WbsCode</MudText>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Task Name">
+                        @if (_editingTaskId == context.TaskId)
+                        {
+                            <MudTextField @bind-Value="context.TaskName" Variant="Variant.Text"
+                                          Margin="Margin.Dense" Dense="true" />
+                        }
+                        else
+                        {
+                            <MudText Typo="@(context.IsSummaryTask ? Typo.subtitle2 : Typo.body2)"
+                                     Style="@GetIndentStyle(context)">
+                                @(context.IsSummaryTask ? $"** {context.TaskName}" : context.TaskName)
+                            </MudText>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Type">
+                        @if (_editingTaskId == context.TaskId)
+                        {
+                            <MudSelect T="MigrationType" @bind-Value="context.MigrationTypeTag"
+                                       Variant="Variant.Text" Dense="true" Margin="Margin.Dense">
+                                @foreach (var t in GetAvailableTypes())
+                                {
+                                    <MudSelectItem T="MigrationType" Value="@t">@t.GetShortName()</MudSelectItem>
+                                }
+                            </MudSelect>
+                        }
+                        else
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Default">@context.MigrationTypeTag.GetCode()</MudChip>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Days">
+                        @if (_editingTaskId == context.TaskId && !context.IsSummaryTask)
+                        {
+                            <MudNumericField T="int" @bind-Value="context.DurationDays"
+                                             Variant="Variant.Text" Min="1" Dense="true" Margin="Margin.Dense" />
+                        }
+                        else if (!context.IsSummaryTask)
+                        {
+                            <MudText Typo="Typo.body2">@context.DurationDays</MudText>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Start">
+                        @if (_editingTaskId == context.TaskId && !context.IsSummaryTask)
+                        {
+                            <MudDatePicker @bind-Date="context.StartDate" Variant="Variant.Text"
+                                           Dense="true" Margin="Margin.Dense" DateFormat="yyyy-MM-dd" />
+                        }
+                        else if (context.StartDate.HasValue)
+                        {
+                            <MudText Typo="Typo.body2">@context.StartDate.Value.ToString("yyyy-MM-dd")</MudText>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Finish">
+                        @if (_editingTaskId == context.TaskId && !context.IsSummaryTask)
+                        {
+                            <MudDatePicker @bind-Date="context.FinishDate" Variant="Variant.Text"
+                                           Dense="true" Margin="Margin.Dense" DateFormat="yyyy-MM-dd" />
+                        }
+                        else if (context.FinishDate.HasValue)
+                        {
+                            <MudText Typo="Typo.body2">@context.FinishDate.Value.ToString("yyyy-MM-dd")</MudText>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Resource">
+                        @if (_editingTaskId == context.TaskId && !context.IsSummaryTask)
+                        {
+                            <MudTextField @bind-Value="context.ResourceOwner" Variant="Variant.Text"
+                                          Margin="Margin.Dense" Dense="true" />
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2">@context.ResourceOwner</MudText>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="%">
+                        @if (_editingTaskId == context.TaskId && !context.IsSummaryTask)
+                        {
+                            <MudNumericField T="int" @bind-Value="context.PercentComplete"
+                                             Variant="Variant.Text" Min="0" Max="100"
+                                             Dense="true" Margin="Margin.Dense" />
+                        }
+                        else if (!context.IsSummaryTask)
+                        {
+                            <MudText Typo="Typo.body2">@context.PercentComplete%</MudText>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Actions">
+                        @if (_editingTaskId == context.TaskId)
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.Check" Size="Size.Small"
+                                           Color="Color.Success" OnClick="SaveEdit" Title="Save" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                                           Color="Color.Default" OnClick="CancelEdit" Title="Cancel" />
+                        }
+                        else
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                           Color="Color.Primary" OnClick="@(() => StartEdit(context))" Title="Edit" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small"
+                                           Color="Color.Error" OnClick="@(() => DeleteTask(context))" Title="Delete" />
+                        }
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudPaper>
+    }
+</MudContainer>
+
+@code {
+    private List<TaskModel> _tasks = [];
+    private MigrationType? _filterType;
+    private int? _editingTaskId;
+    private TaskModel? _editBackup;
+
+    private IEnumerable<TaskModel> FilteredTasks =>
+        _filterType.HasValue
+            ? _tasks.Where(t => t.MigrationTypeTag == _filterType.Value)
+            : _tasks;
+
+    private bool HasValidTasks => _tasks.Any(t => !t.IsSummaryTask && !string.IsNullOrWhiteSpace(t.TaskName));
+
+    protected override void OnInitialized()
+    {
+        _tasks = StateService.Project.Tasks;
+    }
+
+    private List<MigrationType> GetAvailableTypes()
+    {
+        var types = new List<MigrationType> { MigrationType.General };
+        types.AddRange(StateService.Project.SelectedTypes.OrderBy(t => t.ToString()));
+        return types;
+    }
+
+    private string GetIndentStyle(TaskModel task)
+    {
+        var level = task.OutlineLevel - 1;
+        return level > 0 ? $"padding-left: {level * 20}px" : "";
+    }
+
+    private void AddNewTask()
+    {
+        var newTask = new TaskModel
+        {
+            TaskId = StateService.Project.GetNextTaskId(),
+            WbsCode = "",
+            TaskName = "New Task",
+            MigrationTypeTag = MigrationType.General,
+            UspNumber = StateService.Project.UspNumber,
+            DurationDays = 5
+        };
+        _tasks.Add(newTask);
+        _editingTaskId = newTask.TaskId;
+        StateService.NotifyStateChanged();
+    }
+
+    private void StartEdit(TaskModel task)
+    {
+        _editBackup = task.Clone();
+        _editingTaskId = task.TaskId;
+    }
+
+    private void SaveEdit()
+    {
+        var task = _tasks.FirstOrDefault(t => t.TaskId == _editingTaskId);
+        if (task is not null && task.StartDate.HasValue && !task.FinishDate.HasValue)
+        {
+            task.CalculateFinishDate();
+        }
+        _editingTaskId = null;
+        _editBackup = null;
+        StateService.NotifyStateChanged();
+    }
+
+    private void CancelEdit()
+    {
+        if (_editBackup is not null && _editingTaskId.HasValue)
+        {
+            var index = _tasks.FindIndex(t => t.TaskId == _editingTaskId);
+            if (index >= 0)
+                _tasks[index] = _editBackup;
+        }
+        _editingTaskId = null;
+        _editBackup = null;
+    }
+
+    private void DeleteTask(TaskModel task)
+    {
+        _tasks.Remove(task);
+        // Remove any predecessor references to this task
+        foreach (var t in _tasks)
+            t.Predecessors.RemoveAll(p => p.PredecessorTaskId == task.TaskId);
+        StateService.NotifyStateChanged();
+    }
+
+    private void ProceedToConstraints()
+    {
+        StateService.Project.TasksComplete = true;
+        StateService.NotifyStateChanged();
+        Navigation.NavigateTo("/constraints");
+    }
+}
